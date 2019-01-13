@@ -6,7 +6,9 @@ addpath './computation'
 addpath './utils'
 
 %% Load experiment data
-[con, con2, cho, out, nsubs] = load_data('exp');
+
+
+[con, con2, cho, out, nsubs] = load_data('sim', ');
 
 
 %% Optimization
