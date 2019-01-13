@@ -108,7 +108,7 @@ function lik = get_lik(params, s, a, r, model)
             error(sprintf('choice = %d', a(i)));
         end
             
-        if (a(i)) ~= 1.5 % if a choice was performed in time at the first level
+        if a(i) ~= 1.5 % if a choice was performed in time at the first level
 
             lik = lik + beta1 * (Q(s(i), a(i)) + per * (a(i) == ...
                 preva(s(i)))) - log([exp(beta1*(Q(s(i), 1) + per * ...

@@ -8,63 +8,61 @@ function [con, con2, cho, out, nsubs] = load_data(type, cond)
             
             %%  Experiment 1 data extraction
             cd data_exp1
-            nsubs = 0;
-            subjects1 = [1:50]
+            subjects1 = 1:50;
             for sub = subjects1 %or number of subjects with data for 3 sessions
-                nsubs = nsubs + 1;
-                fprintf('Subject %d\n', nsubs);
+                fprintf('Subject %d\n', sub);
 
                 resultname = strcat('exp1_', num2str(sub));
                 load(resultname);
 
-                con{nsubs} = data(:, 3); % 1 to 4 as per condition
-                cho{nsubs} = data(:, 7) / 2 + 1.5; % 1 for left, 2 for right
-                out{nsubs} = (data(:, 8) - 0.5) .* 2; % -1 1
+                con{sub} = data(:, 3); % 1 to 4 as per condition
+                con2{sub} = data(:, 3); % 1 to 4 as per condition
+                cho{sub} = data(:, 7) / 2 + 1.5; % 1 for left, 2 for right
+                out{sub} = (data(:, 8) - 0.5) .* 2; % -1 1
             end
             cd ..
 
             %%  Experiment 2 data extraction
 
             cd data_exp2
-            subjects2 = [1:35]; % controls
+            subjects2 = 1:35; % controls
 
             for sub = subjects2 %or number of subjects with data for 3 sessions
-                nsubs = nsubs + 1;
-                fprintf('Subject %d\n', nsubs);
+                fprintf('Subject %d\n', sub);
 
                 resultname = strcat('exp2_', num2str(sub));
                 load(resultname);
 
-                con{nsubs} = data(:, 3); % 1 to 4 as per condition
-                cho{nsubs} = data(:, 5) / 2 + 1.5; % 1 for left, 2 for right
-                out{nsubs} = (data(:, 8)) .* 2; % -1 1
+                con{sub} = data(:, 3); % 1 to 4 as per condition
+                con2{sub} = data(:, 3); % 1 to 4 as per condition
+                cho{sub} = data(:, 5) / 2 + 1.5; % 1 for left, 2 for right
+                out{sub} = (data(:, 8)) .* 2; % -1 1
             end
             cd ..
 
             %% Experiment 2 data extraction
             cd data_exp3
-            subjects3 = [1:20]; % controls
+            subjects3 = 1:20; % controls
 
             for sub = subjects3 %or number of subjects with data for 3 sessions
-                nsubs = nsubs + 1;
-                fprintf('Subject %d\n', nsubs);
+                fprintf('Subject %d\n', sub);
 
                 resultname = strcat('Test', num2str(sub), '_Session1');
                 load(resultname);
 
-                con{nsubs} = data(:, 4);
-                con2{nsubs} = data(:, 4); % 1 to 4 as per condition
-                cho{nsubs} = data(:, 6) + 1; % 1 for left, 2 for right
-                out{nsubs} = (data(:, 8) - .5) .* 2; % -1 1
+                con{sub} = data(:, 4);
+                con2{sub} = data(:, 4); % 1 to 4 as per condition
+                cho{sub} = data(:, 6) + 1; % 1 for left, 2 for right
+                out{sub} = (data(:, 8) - .5) .* 2; % -1 1
 
 
                 resultname = strcat('Test', num2str(sub), '_Session2');
                 load(resultname);
 
-                con{nsubs} = [con{nsubs}; data(:, 4) + 4]; % 1 to 4 as per condition
-                con2{nsubs} = [con2{nsubs}; data(:, 4)];
-                cho{nsubs} = [cho{nsubs}; data(:, 6) + 1]; % 1 for left, 2 for right
-                out{nsubs} = [out{nsubs}; (data(:, 8) - .5) .* 2]; % -1 1
+                con{sub} = [con{sub}; data(:, 4) + 4]; % 1 to 4 as per condition
+                con2{sub} = [con2{sub}; data(:, 4)];
+                cho{sub} = [cho{sub}; data(:, 6) + 1]; % 1 for left, 2 for right
+                out{sub} = [out{sub}; (data(:, 8) - .5) .* 2]; % -1 1
 
             end
             cd ..
@@ -78,12 +76,16 @@ function [con, con2, cho, out, nsubs] = load_data(type, cond)
             end
                 
             switch cond
-                case 'risk'
-                    disp('risk');
-                case 'statusquo1'
-                    disp('t');
-                case 'statusquo2'
-                    disp('t');
+                case {'risk', 'statusquo1', 'statusquo2'}
+                    data = load(sprintf('data_sim/%s', cond));
+                    data = data.data;
+                    nsubs = length(data);
+                    for i = 1:nsubs
+                        con{i} = data{i}(:, 3, :);
+                        con2{i} = data{i}(:, 3, :);
+                        cho{i} = data{i}(:, 1, :);
+                        out{i} = data{i}(:, 2, :);  
+                    end
                 otherwise
                     error(['You should specify a valid condition '...
                            '(i.e. risk, statusquo1, statusquo2)']);

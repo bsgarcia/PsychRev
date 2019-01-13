@@ -1,13 +1,164 @@
-% Script running simulations
+% function running simulations
+function data = simulation(fit_params, sim_params)
 
-%% Load fit parameters
+    nsub = length(fit_params(:, 1, 1));
+    nmodel = length(fit_params(1, 1, :));
+    nagent = 50;
 
-%% Define each condition and parameters
-% -------- Status Quo 1 ----------------------------------- 
-data = run_simulation(1, 2);
+    tmax = sim_params('tmax');
+    conds = sim_params('conds');
+    ncond = length(unique(conds));
+    % rewards for each timestep
+    r = sim_params('r');
+    % probability for each timestep
+    p = sim_params('p');
 
-function data = run_simulation(fit_params, sim_params)
-    disp('test');
-    data = 1;
+    % we save 3 variables: choice, outcome, cond
+    % in a matrix for each subject
+    % data{sub}(tmax, var, nmodel)
+    data = repelem({zeros(tmax, 3, nmodel)}, nsub*nagent);
+    
+    i = 0;
+    for agent = 1:nagent
+        for sub = 1:nsub
+            i = i + 1;
+            for model = 1:nmodel
+                params = fit_params(sub, :, model);
+                Q = initqvalues(ncond, params, model);
+                a = zeros(tmax, 1, 1);
+                out = zeros(tmax, 1, 1);
+                s = conds;
+                for t = 1:tmax
+                    a(t) = randsample(...
+                        [1, 2],... % randomly drawn action 1 or 2
+                        1,... % number of element picked
+                        true,...% replacement
+                        softmaxfn(Q, s, a, t, model, params)... % probabilities
+                    );
+                    out(t) = randsample(...
+                        r{t}{a(t)},... 
+                        1,...
+                        true,...
+                        p{t}{a(t)}...
+                    );
+
+                    % update q values
+                    Q = learn(Q, s, a, t, out, model, params);
+                end
+            data{i}(:, 1, model) = a;
+            data{i}(:, 2, model) = out;
+            data{i}(:, 3, model) = s;
+            
+            % flush data
+            clear a;
+            clear out;
+            end
+        end
+    end
 end
 
+function Q = initqvalues(ncond, params, model)
+    
+    Q = zeros(ncond, 2);
+    
+    switch model
+        case 3
+            % stable negative priors
+            Q = Q - 1;
+  
+        case {5, 6}
+            % apply priors
+            Q = Q + params(5);
+        otherwise
+            % do nothing
+            
+    end
+end
+    
+function Q = learn(Q, s, a, t, out, model, params)
+
+    % 1: basic df=2
+    % 2: asymmetric neutral df=3
+    % 3: asymmetric pessimistic df=3
+    % 4: perseveration df=3
+    % 5: priors df=3
+    % 6: full df=5
+
+    switch model
+        %lik = lik + beta1 * Q(s(t),a(t)) - log(sum(exp(beta1 * Q(s(t),:))));
+        case 1 % rescorla wagner classique
+            lr1 = params(2);
+            deltaI = out(t) - Q(s(t), a(t));
+            Q(s(t), a(t)) = Q(s(t), a(t)) + lr1 * deltaI;
+        case 2 % asymmetric win stay and lose shift
+            lr1 = params(2);
+            lr2 = params(3);
+            deltaI = out(t) - Q(s(t), a(t));
+            Q(s(t), a(t)) = ...
+                Q(s(t), a(t)) + lr1 * deltaI * (deltaI > 0) ...
+                +lr2 * deltaI * (deltaI < 0);
+        case 3 % asymmetric win stay and lose shift
+            lr1 = params(2);
+            lr2 = params(3);
+            deltaI = out(t) - Q(s(t), a(t));
+            Q(s(t), a(t)) = ...
+                Q(s(t), a(t)) + lr1 * deltaI * (deltaI > 0) ...
+                +lr2 * deltaI * (deltaI < 0);
+        case 4
+            lr1 = params(2);
+            deltaI = out(t) - Q(s(t), a(t));
+            Q(s(t), a(t)) = Q(s(t), a(t)) + lr1 * deltaI;
+        case 5
+            lr1 = params(2);
+            deltaI = out(t) - Q(s(t), a(t));
+            Q(s(t), a(t)) = Q(s(t), a(t)) + lr1 * deltaI;
+        case 6 % asymmetric win stay and lose shift
+            lr1 = params(2);
+            lr2 = params(3);
+            deltaI = out(t) - Q(s(t), a(t));
+            Q(s(t), a(t)) = Q(s(t), a(t)) + lr1 * deltaI * (deltaI > 0) ...
+                +lr2 * deltaI * (deltaI < 0);
+        otherwise
+            error('Model does not exists');
+    end
+end
+
+function p = softmaxfn(Q, s, a, t, model, params)
+    % softmax function is built-in
+    % so we call this func softmaxfn to avoid shadownaming
+
+    beta1 = params(1);
+
+    switch model
+
+        case {1, 2, 3, 5}
+            p = exp(Q(s(t), :)*beta1) / sum(exp(Q(s(t), :)*beta1));
+
+        case {4, 6}
+            
+            % if t == 1 we use standard softmax
+            if t == 1
+                p = exp(Q(s(t), :)*beta1) / sum(exp(Q(s(t), :)*beta1));
+            % else take into account the last choice
+            else
+                phi = params(4);
+
+                c1 = a(t-1);
+                c2 = 1 + (c1 == 1);
+
+                q1 = beta1 * Q(s(t), c1) + phi;
+                q2 = beta1 * Q(s(t), c2);
+
+                if c1 == 1
+                    order = [q1, q2];
+                else
+                    order = [q2, q1];
+                end
+
+                p = exp(order*beta1) / sum(exp(order*beta1));
+            end
+            
+        otherwise
+            error('Model does not exist');
+    end
+end
