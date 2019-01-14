@@ -154,8 +154,7 @@ function [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
     end
     data = containers.Map({'parameters', 'lpp'},....
             {parameters, lpp}...
-        );
-
+    );
     save(sprintf('fit_sim/%s', str), 'data');
     close(w);
 end
