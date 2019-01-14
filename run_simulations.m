@@ -84,19 +84,15 @@ p('risk') = p_risk;
 %% ----------------  run simulations ---------------------------- % 
 % get new keys
 k = keys(r);
-% declare progression bar
-w = waitbar(0, 'Running condition');
 for i = 1:length(k)
-    waitbar(i/length(k), w, sprintf('Running condition %s', k{i})); 
     
     sim_params = containers.Map(...
-        {'tmax', 'p', 'r', 'conds'},...
-        {tmax, p(k{i}), r(k{i}), conds}...
+        {'tmax', 'p', 'r', 'conds' 'name'},...
+        {tmax, p(k{i}), r(k{i}), conds, k{i}}...
     );
     
     data = simulation(fit_params, sim_params);
     save(sprintf('data_sim/%s', k{i}), 'data');
     clear data;
 end
-
 

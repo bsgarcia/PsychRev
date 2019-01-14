@@ -28,13 +28,13 @@ options = optimset( ...
         'Display', 'off', ...
         'MaxIter', 2000, ...
         'MaxFunEval', 2000);
+        %'UseParallel', true);
     
-w = waitbar(0, 'Get data');
-
     
 % iterate on conditions
 for i = 1:length(condlabels)
 
+    w = waitbar(0, 'Get data');
 
     [lpp, parameters] = getdata(...
         condlabels{i}, nmodel, whichmodel, nparam, options, w);
@@ -54,12 +54,7 @@ end
 
 function [bicmatrix, xlabels, ylabels] = computepercentagewinning(...
     lpp, whichmodel, nmodel, models, subjecttot, tmax)
-    
-%     for fittedmodel = whichmodel
-%         for datamodel = whichmodel
-%             lpp(fittedmodel, datamodel, :) = randi([1, 50], 1, 105);
-%         end
-%     end
+
     nfpm = [2, 3, 3, 3, 3, 5];
 
     bic = zeros(nmodel, nmodel, subjecttot);
@@ -68,15 +63,16 @@ function [bicmatrix, xlabels, ylabels] = computepercentagewinning(...
     for fittedmodel = whichmodel
         bic(fittedmodel, :, :) = -2 * -lpp(fittedmodel, :, :)...
             + nfpm(fittedmodel) * log(tmax);
-        disp(bic(fittedmodel, fittedmodel, :));
-        
-        for sub = 1:subjecttot
-            [mini, argmin] = min(bic(fittedmodel, :, sub));
-             bicmatrix(fittedmodel, argmin) = bicmatrix(fittedmodel, argmin) + 1;
-        end
-        
         xlabels{fittedmodel} = models(fittedmodel);
         ylabels{fittedmodel} = models(fittedmodel);
+    end
+    
+    for datamodel = whichmodel       
+        for sub = 1:subjecttot
+            [mini, argmin] = min(bic(:, datamodel, sub));
+             bicmatrix(datamodel, argmin) = bicmatrix(datamodel, argmin) + 1;
+        end
+        
     end
     
     bicmatrix = bicmatrix ./ (subjecttot/100);
@@ -89,6 +85,7 @@ function [lpp, parameters] = getdata(str, nmodel, whichmodel, nparam,...
         lpp = data.data('lpp');
         parameters = data.data('parameters');
         waitbar(100, w, 'Done');
+        close(w);
         
     catch
         [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
@@ -100,11 +97,11 @@ function [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
     options, w)
     [
         con, ...
-        con2, ...
+        con2,....
         cho, ...
         out, ...
         nsubs, ...
-        ] = load_data('sim', str);
+    ] = load_data('sim', str);
 
     subjecttot = nsubs;
     parameters = repelem({zeros(subjecttot, nparam, nmodel)}, nmodel);
@@ -114,7 +111,13 @@ function [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
     hessian = repelem({cell(subjecttot, nmodel)}, nmodel);
 
     for nsub = 1:subjecttot
-        for fittedmodel = whichmodel
+        waitbar( ...
+            nsub/subjecttot, ... % Compute progression
+            w, ...
+            sprintf('Fitting subject %d for cond %s ', nsub, str) ...
+        );
+        parfor fittedmodel = whichmodel
+            templpp = [];
             for datamodel = whichmodel
                 [
                     p, ...
@@ -140,26 +143,21 @@ function [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
                     );
 
                 parameters{fittedmodel}(nsub, :, datamodel) = p;
-                lpp(fittedmodel, datamodel, nsub) = l;
+                templpp(datamodel) = l;
                 report{fittedmodel}(nsub, datamodel) = rep;
                 gradient{fittedmodel}{nsub, datamodel} = grad;
                 hessian{fittedmodel}{nsub, datamodel} = hess;
 
             end
+            lpp(fittedmodel, :, nsub) = templpp;
         end
-
-        waitbar( ...
-            nsub/subjecttot, ... % Compute progression
-            w, ...
-            sprintf('Fitting subject %d for cond %s ', nsub, str) ...
-        );
-
     end
     data = containers.Map({'parameters', 'lpp'},....
             {parameters, lpp}...
         );
 
     save(sprintf('fit_sim/%s', str), 'data');
+    close(w);
 end
 
 %     tmax = length(con{1}(:, :, datamodel));
@@ -220,3 +218,4 @@ end
     
 %end
 
+ 

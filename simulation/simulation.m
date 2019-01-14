@@ -3,6 +3,7 @@ function data = simulation(fit_params, sim_params)
 
     nsub = length(fit_params(:, 1, 1));
     nmodel = length(fit_params(1, 1, :));
+    
     nagent = 50;
 
     tmax = sim_params('tmax');
@@ -19,9 +20,19 @@ function data = simulation(fit_params, sim_params)
     data = repelem({zeros(tmax, 3, nmodel)}, nsub*nagent);
     
     i = 0;
+    w = waitbar(0, '');
     for agent = 1:nagent
         for sub = 1:nsub
             i = i + 1;
+            waitbar(i/(nagent*nsub),...  % Compute progression
+                w,...
+                sprintf(...
+                    '%s %s \n %s%d',...
+                    'Cond',...
+                    sim_params('name'),...
+                    'Running agent ',...
+                 i)...
+            );
             for model = 1:nmodel
                 params = fit_params(sub, :, model);
                 Q = initqvalues(ncond, params, model);

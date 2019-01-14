@@ -3,6 +3,16 @@ function data = simulation(fit_params, sim_params)
 
     nsub = length(fit_params(:, 1, 1));
     nmodel = length(fit_params(1, 1, :));
+    
+    if nmodel ~= 6
+        error('error in nb of models');
+    end
+    
+    if nsub ~= 105
+        error('error in nb of models');
+
+        
+    nagent = 1;
 
     tmax = sim_params('tmax');
     conds = sim_params('conds');
@@ -15,40 +25,43 @@ function data = simulation(fit_params, sim_params)
     % we save 3 variables: choice, outcome, cond
     % in a matrix for each subject
     % data{sub}(tmax, var, nmodel)
-    data = repelem({zeros(tmax, 3, nmodel)}, nsub);
+    data = repelem({zeros(tmax, 3, nmodel)}, nsub*nagent);
     
-    for agen
-    for sub = 1:nsub
-        for model = 1:nmodel
-            params = fit_params(sub, :, model);
-            Q = initqvalues(ncond, params, model);
-            a = zeros(tmax, 1, 1);
-            out = zeros(tmax, 1, 1);
-            s = conds;
-            for t = 1:tmax
-                a(t) = randsample(...
-                    [1, 2],... % randomly drawn action 1 or 2
-                    1,... % number of element picked
-                    true,...% replacement
-                    softmaxfn(Q, s, a, t, model, params)... % probabilities
-                );
-                out(t) = randsample(...
-                    r{t}{a(t)},... 
-                    1,...
-                    true,...
-                    p{t}{a(t)}...
-                );
-            
-                % update q values
-                Q = learn(Q, s, a, t, out, model, params);
-            end
-            data{sub}(:, 1, model) = a;
-            data{sub}(:, 2, model) = out;
-            data{sub}(:, 3, model) = s;
+    i = 0;
+    for agent = 1:nagent
+        for sub = 1:nsub
+            i = i + 1;
+            for model = 1:nmodel
+                params = fit_params(sub, :, model);
+                Q = initqvalues(ncond, params, model);
+                a = zeros(tmax, 1, 1);
+                out = zeros(tmax, 1, 1);
+                s = conds;
+                for t = 1:tmax
+                    a(t) = randsample(...
+                        [1, 2],... % randomly drawn action 1 or 2
+                        1,... % number of element picked
+                        true,...% replacement
+                        softmaxfn(Q, s, a, t, model, params)... % probabilities
+                    );
+                    out(t) = randsample(...
+                        r{t}{a(t)},... 
+                        1,...
+                        true,...
+                        p{t}{a(t)}...
+                    );
+
+                    % update q values
+                    Q = learn(Q, s, a, t, out, model, params);
+                end
+            data{i}(:, 1, model) = a;
+            data{i}(:, 2, model) = out;
+            data{i}(:, 3, model) = s;
             
             % flush data
             clear a;
             clear out;
+            end
         end
     end
 end
