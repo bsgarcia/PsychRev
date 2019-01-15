@@ -1,96 +1,156 @@
-% This function find the best fitting model/parameters
-close all
 
-addpath './simulation'
-addpath './computation'
-addpath './utils'
+function recovery()
+    % main function that calls the others
 
-%% Set  variables
-condlabels = {'risk', 'statusquo1', 'statusquo2'};
-nmodel = 6;
-whichmodel = 1:nmodel;
-nparam = 5;
-tmax = 4*48;
-models = containers.Map(whichmodel,...
-    {'QLearning', 'Asymmetric', 'AsymmetricPessimistic', 'Perseveration', ...
-    'Priors', 'Full'});
+    close all
 
-% 1: basic df=2
-% 2: asymmetric neutral df=3
-% 3: asymmetric pessimistic df=3
-% 4: perseveration df=3
-% 5: priors df=3
-% 6: full df=5
+    addpath './simulation'
+    addpath './computation'
+    addpath './utils'
 
-options = optimset( ...
-        'Algorithm', ...
-        'interior-point', ...
-        'Display', 'off', ...
-        'MaxIter', 2000, ...
-        'MaxFunEval', 2000);
-        %'UseParallel', true);
-    
-    
-% iterate on conditions
-for i = 1:length(condlabels)
+    %% Set  variables
+    condlabels = {'risk', 'statusquo1', 'statusquo2'};
+    nmodel = 6;
+    whichmodel = 1:nmodel;
+    nparam = 5;
+    tmax = 4*48;
+    models = {'QLearning', 'Asymmetric', 'AsymmetricPessimistic', 'Perseveration', ...
+        'Priors', 'Full'};
 
-    w = waitbar(0, 'Get data');
+    % 1: basic df=2
+    % 2: asymmetric neutral df=3
+    % 3: asymmetric pessimistic df=3
+    % 4: perseveration df=3
+    % 5: priors df=3
+    % 6: full df=5
+    options = optimset( ...
+            'Algorithm', ...
+            'interior-point', ...
+            'Display', 'off', ...
+            'MaxIter', 2000, ...
+            'MaxFunEval', 2000);
+            %'UseParallel', true);
 
-    [lpp, parameters] = getdata(...
-        condlabels{i}, nmodel, whichmodel, nparam, options, w);
+    % iterate on conditions
+    for i = 1:length(condlabels)
 
-    [bicmatrix, xlabels, ylabels] = computepercentagewinning(...
-        lpp, whichmodel, nmodel, models, length(lpp(1, 1, :)), tmax);
-    
+        w = waitbar(0, 'Get data');
+        
+        try
+            [lpp, parameters] = getdata(condlabels{i});
+        catch
+            [lpp, parameters] = runfit(condlabels{i}, nmodel, whichmodel, nparam,...
+            options, w);
+        end
+        
+        subjecttot = length(lpp(1, 1, :));
+
+        [bic, aic] = computebicaic(lpp, tmax, nmodel, subjecttot, whichmodel);
+
+        % set x and y labels
+        xlabels = models;
+        ylabels = models;
+
+        % Compute the posterior probabilities
+        bicmatrix = computeposterior(...
+            bic, whichmodel, nmodel, models, subjecttot, condlabels{i});
+
+        aicmatrix = computeposterior(...
+            aic, whichmodel, nmodel, models, subjecttot, condlabels{i});
+        
+        % plot bic recovery for one condition
+        plotheatmap(bicmatrix, xlabels, ylabels,...
+            'Simulated data using model x', 'Fitted model',...
+            sprintf('BIC Condition %s', condlabels{i}),...
+            'mean of posterior probabilities');
+        
+        % plot bic recovery for one condition
+        plotheatmap(aicmatrix, xlabels, ylabels,...
+            'Simulated data using model x', 'Fitted model',...
+            sprintf('AIC Condition %s', condlabels{i}),...
+            'mean of posterior probabilities');
+    end
+end
+
+%% ---------------------- Plot functions -------------------------------- % 
+
+function plotheatmap(data, xlabels, ylabels, xaxislabel, yaxislabel, titlelabel,...
+    cname)
+
     figure;
-    h = heatmap(xlabels, ylabels, bicmatrix);
-    ylabel('Simulation using model x');
-    xlabel('Fitted model');
-    title(sprintf('Condition %s', condlabels{i}));
+    h = heatmap(xlabels, ylabels, data);
+    ylabel(yaxislabel);
+    xlabel(xaxislabel);
+    title(titlelabel);
+    ax = gca;     %then ax becomes the handle to the heatmap
+    axs = struct(ax);   %and ignore the warning
+    c = axs.Colorbar;    %now you have a handle to the colorbar object    
+    c.Label.String = cname;
+    %set(c.Label, 'Rotation', -360+-90);
 
 end
 
-%% ---------------------- functions -------------------------------- % 
+%% ---------------------- computation functions -------------------------------- % 
 
-function [bicmatrix, xlabels, ylabels] = computepercentagewinning(...
-    lpp, whichmodel, nmodel, models, subjecttot, tmax)
-
+function [bic, aic] = computebicaic(lpp, tmax, nmodel, subjecttot, whichmodel)
+    % 1: basic df=2
+    % 2: asymmetric neutral df=3
+    % 3: asymmetric pessimistic df=3
+    % 4: perseveration df=3
+    % 5: priors df=3
+    % 6: full df=5
     nfpm = [2, 3, 3, 3, 3, 5];
 
     bic = zeros(nmodel, nmodel, subjecttot);
-    bicmatrix = zeros(nmodel, nmodel);
+    aic = zeros(nmodel, nmodel, subjecttot);
 
     for fittedmodel = whichmodel
         bic(fittedmodel, :, :) = -2 * -lpp(fittedmodel, :, :)...
             + nfpm(fittedmodel) * log(tmax);
-        xlabels{fittedmodel} = models(fittedmodel);
-        ylabels{fittedmodel} = models(fittedmodel);
+        
+        aic(fittedmodel, :, :) = -2 * -lpp(fittedmodel, :, :)...
+            + nfpm(fittedmodel);
+       
     end
-    
+end
+
+function matrix = computeposterior(...
+    criterion, whichmodel, nmodel, models, subjecttot, cond)   
+    for datamodel = whichmodel
+        %set options
+        %options.modelNames = models(whichmodel);
+        options.figName = sprintf(...
+            '%s condition, data generated using %s', cond, models{datamodel});
+        options.DisplayWin = false;
+        
+        formatedmatrix(1:nmodel, 1:subjecttot) = -criterion(:, datamodel, :);
+        
+        [posterior, outcome] = VBA_groupBMC(formatedmatrix, options);
+        for fittedmodel = whichmodel
+            matrix(datamodel, fittedmodel) = mean(posterior.r(fittedmodel, :));
+        end
+    end
+end
+
+function bicmatrix = computepercentagewinning(...
+    bic, whichmodel, nmodel, subjecttot)
+
+    bicmatrix = zeros(nmodel, nmodel);
     for datamodel = whichmodel       
         for sub = 1:subjecttot
-            [mini, argmin] = min(bic(:, datamodel, sub));
+            [useless, argmin] = min(bic(:, datamodel, sub));
              bicmatrix(datamodel, argmin) = bicmatrix(datamodel, argmin) + 1;
         end
-        
     end
-    
     bicmatrix = bicmatrix ./ (subjecttot/100);
 end
 
-function [lpp, parameters] = getdata(str, nmodel, whichmodel, nparam,...
-    options, w)
-    try
+%% --------------------------- Get fit data functions ------------ % 
+
+function [lpp, parameters] = getdata(str)
         data = load(sprintf('fit_sim/%s', str));
         lpp = data.data('lpp');
         parameters = data.data('parameters');
-        waitbar(100, w, 'Done');
-        close(w);
-        
-    catch
-        [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
-            options, w);
-    end
 end
 
 function [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
@@ -158,63 +218,3 @@ function [lpp, parameters] = runfit(str, nmodel, whichmodel, nparam,...
     save(sprintf('fit_sim/%s', str), 'data');
     close(w);
 end
-
-%     tmax = length(con{1}(:, :, datamodel));
-%     nfpm = [2, 3, 3, 3, 3, 5];
-%     
-%     aic = cell(nmodel, 1, 1);
-%     bic = cell(nmodel, 1, 1);
-%     aicpost = cell(nmodel, 1, 1);
-%     bicpost = cell(nmodel, 1, 1);
-%     aicout = cell(nmodel, 1, 1);
-%     bicout = cell(nmodel, 1, 1);
-% 
-%     %% to correct
-%     for fittedmodel = whichmodel
-%         for datamodel = whichmodel
-%             
-%             [
-%                 aic{fittedmodel}(1:subjecttot, datamodel),...
-%                 bic{fittedmodel}(1:subjecttot, datamodel),...
-%             ] = aicbic(...
-%                     -lpp{fittedmodel}(1:subjecttot, datamodel),....
-%                     ones(subjecttot, 1, 1)*nfpm(fittedmodel),... % nparams
-%                     ones(subjecttot, 1, 1)*tmax... % nobs
-%             );
-%             
-%             %
-%             [
-%                 aicpost{fittedmodel},...
-%                 aicout{fittedmodel},...
-%             ] = VBA_groupBMC(aic{fittedmodel}(1:subjecttot, datamodel));
-%         
-%             
-%         
-%             [
-%                 bicpost{fittedmodel},...
-%                 bicout{fittedmodel},...
-%             ] = VBA_groupBMC(bic{fittedmodel}(1:subjecttot, datamodel));
-% 
-% 
-%             %bic{fittedmodel}(1:subjecttot, datamodel) = ...
-%                 %-2 * -lpp{fittedmodek}(1:subjecttot, datamodel)...
-%                 %+ nfpm(datamodel) * log(tmax);
-%             
-%             %aic{fittedmodel}(1:subjecttot, datamodel) = ...
-%                 %-2 * -lpp{fittedmodek}(1:subjecttot, datamodel)...
-%                 %+ nfpm(datamodel) * log(tmax);
-%             %bic(86:105, n) = -2 * -lpp(86:105, n) + nfpm(n) * log(96*2);
-%             % l2 is already positive
-%             % aic(:,n)=lpp(:,n)+2*nfpm(n);
-%             %
-%         end
-%     end
-%     
-%     %% Plot
-%     
-%     tbl = table();
-%     h = heatmap(tbl,'Smoker','SelfAssessedHealthStatus','ColorVariable','Age');
-    
-%end
-
- 
